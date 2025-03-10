@@ -8,7 +8,7 @@ print("Current Working Directory:", cwd)
 #print("New Working Directory:", os.getcwd())
 
 # Load the dataset - We downloaded NewYork City Taxi trip duration dataset from Kaggle
-df = pd.read_csv("train.csv")
+df = pd.read_csv("NY_taxi_train.csv")
 print(df.info())
 print(df.describe())
 # Step 1: 
