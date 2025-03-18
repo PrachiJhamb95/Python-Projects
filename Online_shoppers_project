@@ -1,0 +1,86 @@
+#Use XGBoost and Clustering to predict the Revenue of the online shoppers
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import seaborn as sns
+import plotly as py
+import plotly.graph_objs as go
+import warnings
+warnings.filterwarnings("ignore")
+import xgboost as xgb
+# Load dataset
+df = pd.read_csv("/Users/prachijhamb/Downloads/online_shoppers_intention.csv")   
+df.head()
+df.info()
+df.describe()
+df.isnull().sum()
+df.columns
+
+def LABEL_ENCODING(c1):
+    from sklearn import preprocessing
+    # label_encoder object knows how to understand word labels.
+    label_encoder = preprocessing.LabelEncoder()
+ 
+    # Encode labels in column 'species'.
+    df[c1]= label_encoder.fit_transform(df[c1])
+ 
+    df[c1].unique()
+    return df
+
+LABEL_ENCODING('Revenue')
+
+df= pd.get_dummies(df, columns = ['Month', 'Weekend','VisitorType'])
+df
+#Feature Engineering
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+scaler.fit(df)
+feature=df.drop('Revenue',axis=1)
+label=df['Revenue']
+from sklearn.model_selection import train_test_split
+X_train,X_test,y_train,y_test=train_test_split(feature,label,test_size=.3)
+print(X_train.shape,y_train.shape)
+print(X_test.shape,y_test.shape)
+D_train = xgb.DMatrix(data=X_train, label=y_train)
+D_test = xgb.DMatrix(data=X_test, label=y_test)
+param = {
+    'eta': 0.3, 
+    'max_depth': 3,  
+    'objective': 'multi:softprob',  
+    'num_class': 3} 
+
+steps = 20  # The number of training iterations
+model = xgb.train(param, D_train, steps)
+import numpy as np
+from sklearn.metrics import precision_score, recall_score, accuracy_score
+
+preds = model.predict(D_test)
+best_preds = np.asarray([np.argmax(line) for line in preds])
+
+print("Precision = {}".format(precision_score(y_test, best_preds, average='macro')))
+print("Recall = {}".format(recall_score(y_test, best_preds, average='macro')))
+print("Accuracy = {}".format(accuracy_score(y_test, best_preds)))
+#Clustering
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+pca = PCA(2)
+df3=pca.fit_transform(df)
+df3.shape
+kmeans = KMeans(3)
+kmeans.fit(df3)
+identified_clusters = kmeans.fit_predict(df3)
+identified_clusters
+filter_label=df[identified_clusters==0]
+#Getting unique labels
+ 
+u_labels = np.unique(identified_clusters)
+ 
+#plotting the results:
+ax = plt.subplot(111, projection='3d', label="bla")
+ 
+for i in u_labels:
+    ax.scatter(df3[identified_clusters == i , 0] , df3[identified_clusters == i,1] , label = i)
+plt.legend()
+plt.show()
+
