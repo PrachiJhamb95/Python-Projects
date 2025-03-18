@@ -1,0 +1,167 @@
+#predict 6 weeks of daily sales for 1,115 stores located across Germany.
+# pandas
+import pandas as pd
+from pandas import Series,DataFrame
+
+# numpy, matplotlib, seaborn
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_style('whitegrid')
+#matplotlib inline
+
+# machine learning
+from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC, LinearSVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+import xgboost as xgb
+
+# statistics
+from statsmodels.distributions.empirical_distribution import ECDF
+
+# time series analysis
+from statsmodels.tsa.seasonal import seasonal_decompose
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+
+# prophet by Facebook
+from prophet import Prophet
+import warnings
+warnings.filterwarnings("ignore")
+
+# get rossmann, store, & test csv files as a DataFrame
+rossmann_df  = pd.read_csv("/Users/prachijhamb/Downloads/rossmann-store-sales/train.csv")
+store_df     = pd.read_csv("/Users/prachijhamb/Downloads/rossmann-store-sales/store.csv")
+test_df      = pd.read_csv("/Users/prachijhamb/Downloads/rossmann-store-sales/test.csv")
+
+# preview the data
+rossmann_df.head()
+# time series as indexes
+rossmann_df.index
+#Exploratory Data Analysis
+rossmann_df['Date'] = pd.to_datetime(rossmann_df['Date'])
+rossmann_df.set_index('Date', inplace=True)
+rossmann_df['Year'] = rossmann_df.index.year
+rossmann_df['Month'] = rossmann_df.index.month
+rossmann_df['Day'] = rossmann_df.index.day
+rossmann_df['WeekOfYear'] = rossmann_df.index.isocalendar().week
+
+# adding new variable
+rossmann_df['SalePerCustomer'] = rossmann_df['Sales']/rossmann_df['Customers']
+rossmann_df['SalePerCustomer'].describe()
+
+#Missing values
+rossmann_df[(rossmann_df.Open == 0) & (rossmann_df.Sales == 0)].head()
+zero_sales = rossmann_df[(rossmann_df.Open != 0) & (rossmann_df.Sales == 0)]
+print("In total: ", zero_sales.shape)
+# fill NaN with a median value (skewed distribuion)
+store_df['CompetitionDistance'].fillna(store_df['CompetitionDistance'].median(), inplace = True)
+# replace NA's by 0
+store_df.fillna(0, inplace = True)
+#Merge Data
+train_store = pd.merge(rossmann_df, store_df, how = 'inner', on = 'Store')
+train_store.head()
+
+print("In total: ", train_store.shape)
+train_store.head()
+
+# preparation: input should be float type
+rossmann_df['Sales'] = rossmann_df['Sales'] * 1.0
+
+# store types
+sales_a = rossmann_df[train_store == 2]['Sales']
+sales_b = rossmann_df[train_store == 85]['Sales'].sort_index(ascending = True) # solve the reverse order
+sales_c = rossmann_df[train_store == 1]['Sales']
+sales_d = rossmann_df[train_store == 13]['Sales']
+p = 'steelblue'  # or any other valid matplotlib color
+f, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize = (12, 13))
+#Seasonality
+# store types
+sales_a.resample('W').sum().plot(color = p, ax = ax1)
+sales_b.resample('W').sum().plot(color = p, ax = ax2)
+sales_c.resample('W').sum().plot(color = p, ax = ax3)
+sales_d.resample('W').sum().plot(color = p, ax = ax4)
+#Yearly trend
+f, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize = (12, 13))
+
+#Autocorrelation
+# figure for subplots
+plt.figure(figsize = (12, 8))
+
+# acf and pacf for A
+plt.subplot(421); plot_acf(sales_a, lags = 50, ax = plt.gca(), color = p)
+plt.subplot(422); plot_pacf(sales_a, lags = 50, ax = plt.gca(), color = p)
+
+# acf and pacf for B
+plt.subplot(423); plot_acf(sales_b, lags = 50, ax = plt.gca(), color = p)
+plt.subplot(424); plot_pacf(sales_b, lags = 50, ax = plt.gca(), color = p)
+
+# acf and pacf for C
+plt.subplot(425); plot_acf(sales_c, lags = 50, ax = plt.gca(), color = p)
+plt.subplot(426); plot_pacf(sales_c, lags = 50, ax = plt.gca(), color = p)
+
+# acf and pacf for D
+plt.subplot(427); plot_acf(sales_d, lags = 50, ax = plt.gca(), color = p)
+plt.subplot(428); plot_pacf(sales_d, lags = 50, ax = plt.gca(), color = p)
+
+plt.show()
+#Forecasting for the next 6 weeks for the first store
+# importing data
+df = pd.read_csv("/Users/prachijhamb/Downloads/rossmann-store-sales/train.csv",  
+                    low_memory = False)
+
+# remove closed stores and those with no sales
+df = df[(df["Open"] != 0) & (df['Sales'] != 0)]
+
+# sales for the store number 1 (StoreType C)
+sales = df[df.Store == 1].loc[:, ['Date', 'Sales']]
+
+# reverse to the order: from 2013 to 2015
+sales = sales.sort_index(ascending = False)
+
+# to datetime64
+sales['Date'] = pd.DatetimeIndex(sales['Date'])
+sales.dtypes
+
+sales = sales.rename(columns = {'Date': 'ds',
+                                'Sales': 'y'})
+sales.head()
+
+# plot daily sales
+ax = sales.set_index('ds').plot(figsize = (12, 4), color = p)
+ax.set_ylabel('Daily Number of Sales')
+ax.set_xlabel('Date')
+plt.show()
+
+# create holidays dataframe
+state_dates = df[(df.StateHoliday == 'a') | (df.StateHoliday == 'b') & (df.StateHoliday == 'c')].loc[:, 'Date'].values
+school_dates = df[df.SchoolHoliday == 1].loc[:, 'Date'].values
+
+state = pd.DataFrame({'holiday': 'state_holiday',
+                      'ds': pd.to_datetime(state_dates)})
+school = pd.DataFrame({'holiday': 'school_holiday',
+                      'ds': pd.to_datetime(school_dates)})
+
+holidays = pd.concat((state, school))      
+holidays.head()
+
+# set the uncertainty interval to 95%
+my_model = Prophet(interval_width = 0.95, 
+                   holidays = holidays)
+my_model.fit(sales)
+
+# dataframe that extends into future 6 weeks 
+future_dates = my_model.make_future_dataframe(periods = 6*7)
+
+print("First week to forecast.")
+future_dates.tail(7)
+
+# predictions
+forecast = my_model.predict(future_dates)
+
+# preditions for last week
+forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(7)
+
+#Parts of the code adopted from : https://github.com/elena-roff/time-series-prophet/blob/master/Rossmann_Sales.ipynb
